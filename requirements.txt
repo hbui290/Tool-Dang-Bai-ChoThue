@@ -1,0 +1,5 @@
+patchright
+flask>=3.0
+# Sau khi cài: chạy `patchright install chrome` (cần Google Chrome trên máy).
+# Patchright là bản patched của Playwright (drop-in) — tự kéo playwright phù hợp.
+# Lưu ý: "humanize" trong code là module nội bộ (src/humanize.py), KHÔNG phải package pip.

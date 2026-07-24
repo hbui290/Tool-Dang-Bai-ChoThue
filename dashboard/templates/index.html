@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Bảng điều khiển đăng bài cho thuê tự động">
+<title>Đăng bài cho thuê · Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* light — warm off-white, single cool-blue accent */
+  --bg:#eef1f5; --bg2:#e7ebf1; --surface:#ffffff; --surface2:#f3f5f9;
+  --ink:#161a21; --ink2:#3d434e; --muted:#727a88; --border:#e0e4ea;
+  --accent:#3d6fe0; --accent-ink:#ffffff;
+  --good:#1f9d57; --warn:#d68a1e; --bad:#d94a34;
+  --shadow:0 1px 2px rgba(30,45,80,.06),0 6px 20px -8px rgba(30,45,80,.14);
+  --shadow-sm:0 1px 2px rgba(30,45,80,.06);
+  --ring:0 0 0 3px rgba(61,111,224,.28);
+  --r:14px; --r-sm:9px;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0d0f14; --bg2:#0a0c10; --surface:#161922; --surface2:#1e222d;
+    --ink:#e8eaf0; --ink2:#c2c7d2; --muted:#7c8494; --border:#262b37;
+    --accent:#5b84f0; --accent-ink:#0b0d12;
+    --good:#3cc078; --warn:#e6a441; --bad:#ec5f47;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -12px rgba(0,0,0,.6);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+    --ring:0 0 0 3px rgba(91,132,240,.35);
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:"Outfit",-apple-system,Segoe UI,Roboto,sans-serif;
+  background:
+    radial-gradient(1200px 600px at 100% -10%,color-mix(in srgb,var(--accent) 9%,transparent),transparent 60%),
+    radial-gradient(900px 500px at -10% 0%,color-mix(in srgb,var(--good) 7%,transparent),transparent 55%),
+    var(--bg);
+  background-attachment:fixed;
+  color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  letter-spacing:-.01em}
+.num{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 18px 40px}
+
+/* header — sticky glass bar */
+header{position:sticky;top:12px;z-index:20;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  background:color-mix(in srgb,var(--surface) 78%,transparent);
+  backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);
+  padding:13px 16px;border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow)}
+h1{font-size:19px;font-weight:800;margin:0;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
+h1 .logo{font-size:22px}
+h2{font-size:13px;margin:0 0 12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.grow{flex:1}
+
+.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;
+  font-size:12px;font-weight:600;border:1px solid transparent}
+.dot{width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 22%,transparent)}
+.pill .dot{background:currentColor}
+.pill.on{background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good);border-color:color-mix(in srgb,var(--good) 30%,transparent)}
+.pill.off{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad);border-color:color-mix(in srgb,var(--bad) 30%,transparent)}
+.pill.pause{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+.pill.on .dot{animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+button{font-family:inherit;font-size:13px;font-weight:600;border:1px solid var(--border);border-radius:10px;
+  padding:9px 14px;cursor:pointer;background:var(--surface2);color:var(--ink);
+  transition:transform .12s ease,box-shadow .18s ease,background .18s ease,border-color .18s;letter-spacing:-.01em}
+button:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));box-shadow:var(--shadow-sm);transform:translateY(-1px)}
+button:active{transform:translateY(0) scale(.98)}
+button:focus-visible{outline:none;box-shadow:var(--ring)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+button.primary:hover{filter:brightness(1.06)}
+button.warn{background:color-mix(in srgb,var(--warn) 16%,var(--surface2));color:var(--warn);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+button.small{padding:6px 11px;font-size:12px}
+
+/* stat cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin:18px 0}
+.card{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:16px 16px 15px;box-shadow:var(--shadow-sm);overflow:hidden;transition:transform .16s ease,box-shadow .2s}
+.card:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);opacity:.85}
+.card.k-good:before{background:var(--good)} .card.k-warn:before{background:var(--warn)}
+.card.k-mut:before{background:var(--muted)}
+.card .big{font-size:30px;font-weight:800;line-height:1;letter-spacing:-.03em;
+  font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums}
+.card .lbl{color:var(--muted);font-size:12px;margin-top:8px;font-weight:500}
+
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:18px;box-shadow:var(--shadow-sm);margin-top:16px;overflow-x:auto}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:var(--surface2)}
+tbody tr:last-child td{border-bottom:none}
+th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.05em;text-transform:uppercase}
+td.name{white-space:normal;min-width:190px;font-weight:600}
+td .num,td.num{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums}
+
+.badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;letter-spacing:.01em;
+  border:1px solid transparent;display:inline-block}
+.b-approved,.b-live{background:color-mix(in srgb,var(--good) 15%,transparent);color:var(--good);border-color:color-mix(in srgb,var(--good) 28%,transparent)}
+.b-pending{background:color-mix(in srgb,var(--warn) 17%,transparent);color:var(--warn);border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
+.b-error{background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad);border-color:color-mix(in srgb,var(--bad) 28%,transparent)}
+.b-success{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 28%,transparent)}
+
+.switch{position:relative;display:inline-block;width:40px;height:23px}
+.switch input{display:none}
+.slider{position:absolute;inset:0;background:var(--border);border-radius:22px;transition:.22s;cursor:pointer}
+.slider:before{content:"";position:absolute;width:17px;height:17px;left:3px;top:3px;
+  background:#fff;border-radius:50%;transition:.22s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+input:checked+.slider{background:var(--good)}
+input:checked+.slider:before{transform:translateX(17px)}
+
+/* bar chart (vanilla, upgraded) */
+.bars{display:flex;align-items:flex-end;gap:6px;height:150px;padding-top:10px}
+.bar-col{flex:1;display:flex;flex-direction:column-reverse;align-items:center;min-width:0;cursor:default}
+.seg{width:64%;border-radius:3px 3px 0 0;transition:filter .15s,transform .15s;transform-origin:bottom}
+.bar-col:hover .seg{filter:brightness(1.12) saturate(1.1)}
+.seg+.seg{margin-bottom:2px}
+.bar-x{font-size:10px;color:var(--muted);margin-top:6px;transform:rotate(-45deg);
+  transform-origin:top left;height:26px;font-family:"JetBrains Mono",monospace}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-top:12px;flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sq{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+a{color:var(--accent);text-decoration:none;font-weight:600}
+a:hover{text-decoration:underline}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+label.cfg{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:5px;font-weight:500}
+label.cfg input{width:110px;padding:8px 10px;border:1px solid var(--border);border-radius:9px;
+  background:var(--surface2);color:var(--ink);font-size:13px;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+label.cfg input:focus{outline:none;border-color:var(--accent);box-shadow:var(--ring)}
+.muted{color:var(--muted)}
+.alert{background:color-mix(in srgb,var(--bad) 12%,var(--surface));color:var(--bad);
+  padding:12px 15px;border-radius:var(--r-sm);margin-top:16px;font-weight:600;
+  border:1px solid color-mix(in srgb,var(--bad) 30%,transparent)}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(8px);
+  background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:11px;font-size:13px;font-weight:600;
+  opacity:0;transition:.28s cubic-bezier(.2,.8,.2,1);pointer-events:none;box-shadow:var(--shadow)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.foot{text-align:center;margin:26px 0 0;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <main>
+  <header>
+    <h1><span class="logo">🏠</span> Đăng bài cho thuê</h1>
+    <span id="statusPill" class="pill off"><span class="dot"></span><span id="statusText">…</span></span>
+    <span class="grow"></span>
+    <button id="btnPause" class="warn small">Tạm dừng</button>
+    <button id="btnRefresh" class="small">Quét tương tác</button>
+  </header>
+
+  <div id="alertBox"></div>
+
+  <div class="cards" id="cards"></div>
+
+  <section class="panel">
+    <h2 style="margin-top:0">Bài đăng 14 ngày qua</h2>
+    <div class="bars" id="chart"></div>
+    <div class="legend">
+      <span><i class="sq" style="background:var(--good)"></i> Thành công (đã lên)</span>
+      <span><i class="sq" style="background:var(--warn)"></i> Chờ duyệt</span>
+      <span><i class="sq" style="background:var(--bad)"></i> Lỗi</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">Nhóm (giờ Việt Nam)</h2>
+      <span class="muted num" id="grpCount"></span>
+    </div>
+    <table id="grpTable">
+      <thead><tr><th>Nhóm</th><th>Bật</th><th>Hôm nay</th><th>7 ngày</th><th>Tổng</th>
+      <th>👍</th><th>💬</th><th>Lần cuối</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2 style="margin-top:0">Cấu hình</h2>
+    <div class="row" id="cfgRow">
+      <label class="cfg">Mỗi nhóm cách nhau (phút)<input id="c_interval" type="number" min="30" step="10"></label>
+      <label class="cfg">Giờ bắt đầu<input id="c_hstart" type="text" placeholder="07:00"></label>
+      <label class="cfg">Giờ kết thúc<input id="c_hend" type="text" placeholder="23:30"></label>
+      <label class="cfg">Van an toàn tối đa/ngày (0=không)<input id="c_max" type="number" min="0"></label>
+      <button class="primary" id="btnSaveCfg" style="align-self:flex-end">Lưu</button>
+    </div>
+    <p class="muted" id="cfgHint" style="margin:10px 0 0"></p>
+  </section>
+
+  <section class="panel">
+    <h2 style="margin-top:0">Bài đăng gần đây</h2>
+    <table id="postTable">
+      <thead><tr><th>Giờ</th><th>Nhóm</th><th>Content</th><th>Ảnh</th><th>Trạng thái</th>
+      <th>👍</th><th>💬</th><th>Link</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+  <p class="foot">Tự cập nhật mỗi 20 giây</p>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"),2200);}
+async function api(path,opt){const r=await fetch(path,opt);return r.json();}
+function fmtTime(iso){if(!iso)return"—";const d=new Date(iso);
+  return d.toLocaleString("vi-VN",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});}
+
+let paused=false;
+async function loadStatus(){
+  const s=await api("/api/status");
+  paused=s.paused;
+  const pill=$("#statusPill"),txt=$("#statusText");
+  let cls="on",label="Đang chạy";
+  if(!s.worker_alive){cls="off";label="Worker không chạy";}
+  else if(s.state==="checkpoint"){cls="off";label="⚠ CHECKPOINT";}
+  else if(s.state==="rate_limited"){cls="pause";label="⏸ Bị giới hạn tần suất";}
+  else if(s.paused){cls="pause";label="Đã tạm dừng";}
+  else if(s.state==="idle"){cls="pause";label="Ngoài giờ đăng";}
+  else if(s.state==="posting"){cls="on";label="Đang đăng…";}
+  pill.className="pill "+cls;txt.textContent=label;
+  $("#btnPause").textContent=s.paused?"Chạy lại":"Tạm dừng";
+  $("#btnPause").className=(s.paused?"primary":"warn")+" small";
+  $("#alertBox").innerHTML=s.alert?`<div class="alert">⚠ ${s.alert}</div>`:"";
+}
+async function loadStats(){
+  const d=await api("/api/stats");const s=d.summary;
+  $("#cards").innerHTML=[
+    ["✅ Đã công khai (kiểm chứng)",s.public_live,"bài người ngoài THẤY","k-good"],
+    ["⏳ Chờ duyệt (chưa ai thấy)",s.pending,"bài","k-warn"],
+    ["❓ Đã gửi, chưa kiểm chứng",s.unverified,"bài","k-mut"],
+    ["Tổng đã gửi",s.total_posts,"bài",""],
+    ["Đã đăng hôm nay",s.posts_today,"lần gửi",""],
+    ["Ước tính/ngày",s.estimated_per_day,"bài",""],
+  ].map(([l,b,s2,k])=>`<div class="card ${k}"><div class="big">${b}</div><div class="lbl">${l} · ${s2}</div></div>`).join("");
+  // chart
+  const max=Math.max(1,...d.per_day.map(x=>x.success+x.error));
+  $("#chart").innerHTML=d.per_day.map(x=>{
+    const h=v=>Math.round(v/max*110);
+    const ok=x.success-x.pending;
+    return `<div class="bar-col" title="${x.date}: ${x.success} thành công, ${x.pending} chờ, ${x.error} lỗi">
+      ${x.error?`<div class="seg" style="height:${h(x.error)}px;background:var(--bad)"></div>`:""}
+      ${x.pending?`<div class="seg" style="height:${h(x.pending)}px;background:var(--warn)"></div>`:""}
+      ${ok>0?`<div class="seg" style="height:${h(ok)}px;background:var(--good)"></div>`:""}
+      <div class="bar-x">${x.date.slice(5)}</div></div>`;
+  }).join("");
+  // config fill (chỉ khi chưa focus)
+  if(!document.activeElement||document.activeElement.tagName!=="INPUT"){
+    const c=d.config;
+    $("#c_interval").value=c.repost_interval_minutes;$("#c_max").value=c.max_posts_per_day;
+    $("#c_hstart").value=c.posting_hours_start;$("#c_hend").value=c.posting_hours_end;
+  }
+  $("#cfgHint").textContent=`Mỗi nhóm đăng lại sau ${s.repost_interval_minutes} phút · ước tính ~${s.estimated_per_day} bài/ngày với số nhóm đang bật.`;
+}
+async function loadGroups(){
+  const g=await api("/api/groups");
+  $("#grpCount").textContent=`${g.filter(x=>x.enabled).length}/${g.length} đang bật`;
+  $("#grpTable tbody").innerHTML=g.map(x=>`<tr>
+    <td class="name">${x.name}</td>
+    <td><label class="switch"><input type="checkbox" ${x.enabled?"checked":""}
+      onchange="toggleGroup('${x.url}')"><span class="slider"></span></label></td>
+    <td class="num">${x.today}</td><td class="num">${x.week}</td><td class="num">${x.total}</td>
+    <td class="num">${x.reactions||0}</td><td class="num">${x.comments||0}</td>
+    <td class="muted">${fmtTime(x.last)}</td>
+    <td><button class="small" onclick="postNow('${x.url}','${x.name.replace(/'/g,"")}')">Đăng ngay</button></td>
+  </tr>`).join("");
+}
+async function loadPosts(){
+  const p=await api("/api/posts");
+  $("#postTable tbody").innerHTML=p.map(x=>{
+    let st=`<span class="badge b-${x.status}">${x.status}</span>`;
+    if(x.status==="success"){
+      const a=x.approval_status;
+      if(a==="live") st=`<span class="badge b-live">đã lên (công khai)</span>`;
+      else if(a==="pending") st=`<span class="badge b-pending">chờ duyệt</span>`;
+      else st=`<span class="badge b-success">đã gửi</span>`;
+    }
+    if(x.status==="error"&&x.error&&x.error.includes("screenshots"))
+      st+=` <a href="/screenshots/${x.error.split(/[\\/]/).pop()}" target="_blank">ảnh</a>`;
+    const link=x.permalink?`<a href="${x.permalink}" target="_blank">xem</a>`:"—";
+    return `<tr><td class="muted">${fmtTime(x.time)}</td><td class="name">${x.group_name}</td>
+      <td>${x.content_file||"—"}</td><td class="num">${(x.images||[]).length}</td><td>${st}</td>
+      <td class="num">${x.reactions??"—"}</td><td class="num">${x.comments??"—"}</td><td>${link}</td></tr>`;
+  }).join("");
+}
+async function toggleGroup(url){await api("/api/groups/toggle",{method:"POST",
+  headers:{"Content-Type":"application/json"},body:JSON.stringify({url})});
+  toast("Đã đổi trạng thái nhóm");loadGroups();}
+async function postNow(url,name){if(!confirm("Đăng ngay 1 bài vào:\n"+name+"?"))return;
+  await api("/api/command",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({action:"post_now",args:{group_url:url,group_name:name}})});
+  toast("Đã gửi lệnh đăng — worker sẽ đăng trong giây lát");}
+$("#btnPause").onclick=async()=>{await api("/api/command",{method:"POST",
+  headers:{"Content-Type":"application/json"},body:JSON.stringify({action:paused?"resume":"pause"})});
+  toast(paused?"Đã chạy lại":"Đã tạm dừng");loadStatus();};
+$("#btnRefresh").onclick=async()=>{await api("/api/command",{method:"POST",
+  headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"refresh_metrics"})});
+  toast("Đã gửi lệnh quét tương tác");};
+$("#btnSaveCfg").onclick=async()=>{
+  const body={repost_interval_minutes:+$("#c_interval").value,max_posts_per_day:+$("#c_max").value,
+    posting_hours_start:$("#c_hstart").value,posting_hours_end:$("#c_hend").value};
+  await api("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  toast("Đã lưu cấu hình");};
+function refresh(){loadStatus();loadStats();loadGroups();loadPosts();}
+refresh();setInterval(refresh,20000);
+</script>
+</body>
+</html>

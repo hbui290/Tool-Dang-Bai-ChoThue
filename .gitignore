@@ -1,0 +1,35 @@
+# --- Secrets / cấu hình riêng (KHÔNG đẩy lên GitHub) ---
+# user + password dashboard
+dashboard/auth.json
+# config có contact_phone (số ĐT thật khi dùng)
+config.json
+
+# --- Trạng thái runtime + data sinh ra ---
+state/
+*.log
+deadletter_posts.jsonl
+
+# --- Trình duyệt / profile / artifact QA ---
+**/browser_profile/
+qa_*.png
+qa_*.zip
+qa_video/
+debug_video/
+trace-*.zip
+.playwright-mcp/
+screenshots/
+
+# --- Ảnh & nội dung bài (data riêng của Boss) ---
+images/*
+!images/.gitkeep
+content/*
+!content/_HUONG_DAN.txt
+
+# --- Python ---
+venv/
+__pycache__/
+*.pyc
+.Python
+
+# --- macOS / editor ---
+.DS_Store

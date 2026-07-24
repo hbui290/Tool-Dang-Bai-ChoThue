@@ -1,0 +1,3 @@
+Mỗi file .txt trong thư mục này là MỘT mẫu bài đăng.
+Nên tạo 5-8 mẫu khác nhau (đảo câu, đổi cách viết) để Facebook không coi là spam trùng lặp.
+Nhớ ghi SỐ ĐIỆN THOẠI của bạn trong bài, VÀ điền số đó vào config.json (mục contact_phone).
