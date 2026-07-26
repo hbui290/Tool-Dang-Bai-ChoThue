@@ -56,6 +56,24 @@ RATE_LIMIT_TEXTS = [
 ]
 
 
+SCREENSHOT_KEEP = 300      # giữ tối đa N ảnh debug gần nhất
+
+
+def _prune_screenshots(keep: int = SCREENSHOT_KEEP):
+    """Xoá ảnh debug cũ vượt hạn mức.
+
+    Worker chạy nền vô hạn (VPS, nhiều tháng) và MỌI lỗi đăng đều sinh 1 PNG mới;
+    không dọn thì 1 nhóm lỗi liên tục đủ làm đầy đĩa → mọi ghi file sau đó (kể cả
+    posted_log.json / status.json) bắt đầu lỗi, sinh hành vi bất định.
+    """
+    try:
+        shots = sorted(SCREENSHOT_DIR.glob("*.png"), key=lambda p: p.stat().st_mtime)
+        for old in (shots[:-keep] if len(shots) > keep else []):
+            old.unlink(missing_ok=True)
+    except Exception as e:
+        print(f"[screenshot prune fail] {e}", flush=True)   # dọn lỗi không được chặn đăng bài
+
+
 def _screenshot(page, tag: str) -> str:
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     path = SCREENSHOT_DIR / f"{datetime.now():%Y%m%d_%H%M%S}_{tag}.png"
@@ -64,6 +82,7 @@ def _screenshot(page, tag: str) -> str:
     except Exception as e:
         print(f"[screenshot fail] {tag}: {e}", flush=True)
         return ""
+    _prune_screenshots()
     return str(path)
 
 
@@ -276,49 +295,6 @@ def _detect_approval(page) -> str:
         if t in body:
             return "pending"
     return "submitted"
-
-
-def find_user_post_in_group(page, gid: str, uid: str, timeout_ms: int = 12000):
-    """Tìm permalink bài mới nhất của user trong nhóm (chỉ thấy bài đã được duyệt)."""
-    if not uid:
-        return None
-    try:
-        page.goto(f"https://www.facebook.com/groups/{gid}/user/{uid}/",
-                  wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(5000)
-        links = page.evaluate(
-            "(gid) => { const out=[]; "
-            "document.querySelectorAll(\"a[href*='/posts/'], a[href*='/permalink/']\").forEach(a=>{"
-            "const h=a.href.split('?')[0]; if(h.includes('/groups/'+gid+'/')) out.push(h);}); "
-            "return [...new Set(out)]; }", gid)
-        return links[0] if links else None
-    except Exception:
-        return None
-
-
-def read_engagement(page, permalink: str) -> dict:
-    """Đọc số lượt thích (reactions) và bình luận của một bài từ permalink."""
-    result = {"reactions": None, "comments": None, "ok": False}
-    try:
-        page.goto(permalink, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(5000)
-        if page.locator("input[name='pass']").count() > 0:
-            return result
-        body = page.locator("body").inner_text()
-    except Exception:
-        return result
-
-    # Bình luận: "12 bình luận" / "12 comments"
-    m = re.search(r"([\d.,]+)\s*(?:bình luận|comments?)", body, re.IGNORECASE)
-    if m:
-        result["comments"] = _to_int(m.group(1))
-    # Reactions: "Tất cả cảm xúc: 12" hoặc "12 lượt thích" / con số cạnh icon like
-    m = (re.search(r"Tất cả cảm xúc[:\s]*([\d.,]+)", body)
-         or re.search(r"([\d.,]+)\s*(?:lượt thích|lượt bày tỏ|reactions?|likes?)", body, re.IGNORECASE))
-    if m:
-        result["reactions"] = _to_int(m.group(1))
-    result["ok"] = True
-    return result
 
 
 def _to_int(s: str):

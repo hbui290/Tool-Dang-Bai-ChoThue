@@ -11,12 +11,15 @@ import re
 import sys
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from patchright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent
 PROFILE_DIR = ROOT / "state" / "browser_profile"
 SHORTLIST = ROOT / "groups_shortlist.json"
 GROUPS = ROOT / "groups.json"
+
+sys.path.insert(0, str(ROOT / "src"))
+import store  # noqa: E402  — dùng chung khoá liên-tiến-trình + ghi nguyên tử với worker/dashboard
 
 EXTRACT_JS = """
 () => {
@@ -37,7 +40,10 @@ SKIP_IDS = {"search", "feed", "discover", "joins", "create"}
 
 
 def group_id(url: str) -> str:
-    m = re.search(r"/groups/([^/]+)", url)
+    # Loại ?query / #fragment giống poster.py: link copy từ app FB mobile thường có
+    # dạng /groups/123?ref=share_... — nếu giữ nguyên query thì ID không bao giờ khớp
+    # với ID trích từ trang thật → nhận diện "đã join" sai, thêm trùng vào groups.json.
+    m = re.search(r"/groups/([^/?#]+)", url)
     return m.group(1) if m else url
 
 
@@ -50,9 +56,9 @@ def main():
     with sync_playwright() as p:
         ctx = p.chromium.launch_persistent_context(
             user_data_dir=str(PROFILE_DIR),
+            channel="chrome",        # đồng bộ stealth với login/find/open_groups
             headless=False,
-            viewport={"width": 1280, "height": 850},
-            args=["--disable-blink-features=AutomationControlled"],
+            no_viewport=True,        # KHÔNG set viewport/UA/flags custom (khuyến nghị Patchright)
         )
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.goto("https://www.facebook.com/groups/joins/", wait_until="domcontentloaded", timeout=60000)
@@ -90,13 +96,18 @@ def main():
         print("\nKhông có nhóm mới để thêm. Nếu bạn vừa bấm Tham gia, có thể admin chưa duyệt.")
         return
 
-    # Giữ lại các nhóm ví dụ chỉ khi người dùng đã bật enabled
-    kept = [g for g in existing if g.get("enabled") or "XXXXXXXXXX" not in g["url"] and "YYYYYYYYYY" not in g["url"]]
-    for g in new:
-        kept.append({"name": g["name"], "url": g["url"], "enabled": True})
-
-    GROUPS.write_text(json.dumps(kept, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\nĐã cập nhật groups.json: tổng {len(kept)} nhóm, {len(new)} nhóm mới bật enabled.")
+    # Bọc đọc-sửa-ghi trong khoá và ĐỌC LẠI groups.json: `existing` ở trên được đọc
+    # TRƯỚC vài chục giây automation trình duyệt — ghi bằng snapshot cũ sẽ đè mất mọi
+    # thay đổi từ dashboard (/api/groups/toggle) xảy ra trong lúc đó, không báo lỗi.
+    with store._file_lock("groups"):
+        current = json.loads(GROUPS.read_text(encoding="utf-8")) if GROUPS.exists() else []
+        current_ids = {group_id(g["url"]) for g in current}
+        # Giữ lại các nhóm ví dụ chỉ khi người dùng đã bật enabled
+        kept = [g for g in current if g.get("enabled") or "XXXXXXXXXX" not in g["url"] and "YYYYYYYYYY" not in g["url"]]
+        added = [g for g in new if group_id(g["url"]) not in current_ids]
+        kept.extend({"name": g["name"], "url": g["url"], "enabled": True} for g in added)
+        store._write_json(GROUPS, kept)      # ghi nguyên tử
+    print(f"\nĐã cập nhật groups.json: tổng {len(kept)} nhóm, {len(added)} nhóm mới bật enabled.")
 
 
 if __name__ == "__main__":

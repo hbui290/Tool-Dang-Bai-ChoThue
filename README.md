@@ -10,13 +10,16 @@ cá nhân của người chia sẻ — bạn tự điền thông tin của mình
    ```
    python -m venv venv
    venv\Scripts\pip install -r requirements.txt
-   venv\Scripts\python -m playwright install chromium
+   venv\Scripts\python -m patchright install chrome
    ```
+   (Tool dùng **Patchright** + **Google Chrome thật** để giảm bị nhận diện bot —
+   máy cần cài sẵn Google Chrome.)
 3. **Bỏ ảnh căn hộ** của bạn (.jpg/.png) vào thư mục `images/`.
 4. **Viết bài rao** của bạn vào thư mục `content/` (mỗi file .txt là 1 mẫu; nên 5-8 mẫu).
-   Xem `content/bai-mau-1.txt` làm ví dụ.
-5. Mở `config.json`, sửa `"contact_phone"` = **số điện thoại của bạn** (số này dùng để
-   kiểm tra bài đã lên công khai chưa). Chỉnh khung giờ đăng nếu muốn.
+   Xem `content/_HUONG_DAN.txt` để biết cách viết (kể cả cú pháp spintax `{a|b|c}`).
+5. **Copy `config.json.example` thành `config.json`** (bản clone chưa có `config.json`),
+   rồi sửa `"contact_phone"` = **số điện thoại của bạn** (số này dùng để kiểm tra bài đã
+   lên công khai chưa). Chỉnh khung giờ đăng nếu muốn.
 
 ## 2. Đăng nhập Facebook (làm 1 lần)
 - Double-click **`login.bat`** → cửa sổ Chrome mở → tự tay đăng nhập tài khoản Facebook
@@ -35,8 +38,19 @@ cá nhân của người chia sẻ — bạn tự điền thông tin của mình
   Đóng cửa sổ / tắt máy = dừng.
 
 ## 5. Dashboard theo dõi (tuỳ chọn)
-- Đổi mật khẩu trong `dashboard/auth.json` trước.
+- **Copy `dashboard/auth.json.example` thành `dashboard/auth.json`**, rồi đổi mật khẩu
+  trong đó. Thiếu file này thì `dashboard/app.py` lỗi `FileNotFoundError` ngay khi chạy.
 - Chạy: `venv\Scripts\python dashboard\app.py` → mở trình duyệt vào `http://<IP>:8088`.
+
+## 6. Kiểm chứng & tài liệu
+- [`SCOPE.md`](SCOPE.md) — mục tiêu, phạm vi, kiến trúc 2 tiến trình, cơ chế an toàn,
+  và nhật ký 25 lỗi đã vá qua 2 vòng review độc lập.
+- Bộ kiểm chứng chạy lại được (34 mục — compile, hành vi thống kê, khoá liên tiến trình,
+  dọn file debug; kèm 11 test HTTP thật cho dashboard khi đã có venv+Flask):
+  ```
+  python verify.py
+  ```
+  Exit 0 = đạt hết; có mục FAIL là thoát mã 1 và in rõ mục nào.
 
 ## Lưu ý quan trọng
 - **Đừng đăng quá dày.** Facebook giới hạn tần suất; đăng ~250 bài/ngày sẽ bị chặn.

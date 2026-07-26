@@ -269,7 +269,7 @@ async function loadGroups(){
     <td><label class="switch"><input type="checkbox" ${x.enabled?"checked":""}
       onchange="toggleGroup('${x.url}')"><span class="slider"></span></label></td>
     <td class="num">${x.today}</td><td class="num">${x.week}</td><td class="num">${x.total}</td>
-    <td class="num">${x.reactions||0}</td><td class="num">${x.comments||0}</td>
+    <td class="num">${x.reactions??"—"}</td><td class="num">${x.comments??"—"}</td>
     <td class="muted">${fmtTime(x.last)}</td>
     <td><button class="small" onclick="postNow('${x.url}','${x.name.replace(/'/g,"")}')">Đăng ngay</button></td>
   </tr>`).join("");

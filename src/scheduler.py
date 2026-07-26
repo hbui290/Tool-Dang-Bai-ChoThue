@@ -29,18 +29,21 @@ def load_log() -> list:
 
 def posts_today(log: list) -> int:
     today = datetime.now().strftime("%Y-%m-%d")
-    return sum(1 for e in log if e["time"].startswith(today) and e["status"] == "success")
+    # .get() an toàn: 1 entry log hỏng/thiếu key không được làm crash thống kê.
+    return sum(1 for e in log
+               if str(e.get("time", "")).startswith(today) and e.get("status") == "success")
 
 
 def last_success_time(log: list, group_url: str):
-    times = [e["time"] for e in log if e["group_url"] == group_url and e["status"] == "success"]
+    times = [e["time"] for e in log
+             if e.get("group_url") == group_url and e.get("status") == "success" and e.get("time")]
     return max(times) if times else None
 
 
 def last_attempt_time(log: list, group_url: str):
     """Lần đăng gần nhất bất kể thành công hay lỗi (để nhóm lỗi cũng nghỉ 1 chu kỳ,
     tránh worker kẹt retry mãi 1 nhóm)."""
-    times = [e["time"] for e in log if e["group_url"] == group_url]
+    times = [e["time"] for e in log if e.get("group_url") == group_url and e.get("time")]
     return max(times) if times else None
 
 
@@ -149,7 +152,18 @@ def pick_images(config: dict) -> list:
         raise RuntimeError(f"Không tìm thấy ảnh trong {img_dir}")
     if config.get("use_all_images", False):
         return [str(p) for p in images]
-    n = random.randint(config["images_per_post_min"], min(config["images_per_post_max"], len(images)))
+    # Kẹp CẢ min lẫn max theo số ảnh có thật: nếu chỉ có 1-2 ảnh mà cấu hình đòi min=3
+    # thì random.randint(3, 1) ném ValueError → mọi lượt đăng lỗi → circuit breaker
+    # tự pause ngay ngày đầu, với thông báo không nói rõ nguyên nhân là thiếu ảnh.
+    if config["images_per_post_max"] < config["images_per_post_min"]:
+        # Cấu hình gõ nhầm (max < min): trước đây crash ngay nên lộ lỗi, giờ kẹp lại thì
+        # chạy êm và âm thầm bỏ qua min → phải cảnh báo, đừng để sai lặng lẽ.
+        print(f"[cấu hình sai] images_per_post_max ({config['images_per_post_max']}) < "
+              f"images_per_post_min ({config['images_per_post_min']}) — đang dùng theo max.",
+              flush=True)
+    lo = min(config["images_per_post_min"], len(images))
+    hi = min(config["images_per_post_max"], len(images))
+    n = random.randint(min(lo, hi), hi)
     return [str(p) for p in random.sample(images, n)]
 
 
@@ -163,10 +177,3 @@ def in_posting_hours(config: dict) -> bool:
     now = datetime.now()
     minutes = now.hour * 60 + now.minute
     return _parse_hhmm(config["posting_hours_start"]) <= minutes < _parse_hhmm(config["posting_hours_end"])
-
-
-def next_delay_seconds(config: dict) -> int:
-    return random.randint(
-        config["delay_between_posts_minutes_min"] * 60,
-        config["delay_between_posts_minutes_max"] * 60,
-    )

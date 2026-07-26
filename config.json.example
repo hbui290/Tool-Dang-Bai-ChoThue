@@ -1,0 +1,26 @@
+{
+  "contact_phone": "0900000000",
+
+  "images_dir": "images",
+  "use_all_images": false,
+  "images_per_post_min": 3,
+  "images_per_post_max": 6,
+
+  "posting_hours_start": "07:00",
+  "posting_hours_end": "23:30",
+  "repost_interval_minutes": 720,
+  "max_posts_per_day": 40,
+
+  "max_consecutive_fails": 3,
+  "rate_limit_base_minutes": 15,
+  "rate_limit_cap_minutes": 120,
+  "delay_between_posts_minutes_min": 8,
+  "delay_between_posts_minutes_max": 20,
+
+  "headless": false,
+  "debug_video": false,
+  "debug_trace": false,
+
+  "verifier_profile": null,
+  "proxy": null
+}

@@ -131,7 +131,8 @@ def update_post(post_id: str, **fields):
 
 # ---------- thống kê (giờ VN vì VPS đã đặt Asia/Ho_Chi_Minh) ----------
 def _date(e):
-    return e["time"][:10]
+    # .get() an toàn: entry log hỏng/thiếu "time" không được gây 500 ở /api/stats.
+    return str(e.get("time", ""))[:10]
 
 
 def _parse_hhmm(s: str) -> int:
@@ -211,12 +212,17 @@ def per_group_stats(groups: list) -> list:
     by_url = defaultdict(list)
     for e in log:
         by_url[e.get("group_url")].append(e)
+    def _sum_measured(entries, key):
+        vals = [e[key] for e in entries if e.get(key) is not None]
+        return sum(vals) if vals else None
+
     rows = []
     for g in groups:
         entries = [e for e in by_url.get(g["url"], []) if e.get("status") == "success"]
         today_n = sum(1 for e in entries if _date(e) == today)
-        week_n = sum(1 for e in entries if datetime.fromisoformat(e["time"]).date() >= week_ago)
-        last = max((e["time"] for e in entries), default=None)
+        week_n = sum(1 for e in entries
+                     if e.get("time") and datetime.fromisoformat(e["time"]).date() >= week_ago)
+        last = max((e["time"] for e in entries if e.get("time")), default=None)
         rows.append({
             "name": g["name"],
             "url": g["url"],
@@ -225,8 +231,11 @@ def per_group_stats(groups: list) -> list:
             "week": week_n,
             "total": len(entries),
             "last": last,
-            "reactions": sum(e.get("reactions") or 0 for e in entries),
-            "comments": sum(e.get("comments") or 0 for e in entries),
+            # None = CHƯA ĐO, khác hẳn 0 = đã đo và thật sự không có tương tác.
+            # Hiện chưa có nơi nào ghi reactions/comments, nếu trả 0 thì dashboard hiện
+            # "0" vĩnh viễn và người vận hành sẽ kết luận sai là nội dung không hiệu quả.
+            "reactions": _sum_measured(entries, "reactions"),
+            "comments": _sum_measured(entries, "comments"),
         })
     return rows
 

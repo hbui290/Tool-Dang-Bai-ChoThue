@@ -33,3 +33,6 @@ __pycache__/
 
 # --- macOS / editor ---
 .DS_Store
+
+# Artifact graphify sinh tự động (chứa đường dẫn tuyệt đối máy local)
+graphify-out/

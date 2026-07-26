@@ -4,6 +4,7 @@ Chạy: venv/bin/python dashboard/app.py
 Cấu hình cổng + mật khẩu trong dashboard/auth.json:
   {"user": "admin", "password": "...", "port": 8088}
 """
+import hmac
 import json
 import re
 import sys
@@ -28,7 +29,13 @@ app = Flask(__name__)
 
 
 def check_auth(u, p):
-    return u == AUTH.get("user") and p == AUTH.get("password")
+    # compare_digest: so sánh hằng-thời-gian. `==` trên str dừng ở byte lệch đầu tiên →
+    # thời gian phản hồi rò rỉ số ký tự đúng, brute-force được từng ký tự nếu dashboard
+    # mở ra ngoài mạng (README có kịch bản đó sau khi đổi mật khẩu).
+    # Phải encode sang bytes: compare_digest trên str ném TypeError nếu có ký tự
+    # ngoài ASCII → mật khẩu tiếng Việt/emoji sẽ làm MỌI request 500.
+    return (hmac.compare_digest((u or "").encode("utf-8"), (AUTH.get("user") or "").encode("utf-8"))
+            and hmac.compare_digest((p or "").encode("utf-8"), (AUTH.get("password") or "").encode("utf-8")))
 
 
 def requires_auth(f):
@@ -106,13 +113,16 @@ def screenshots(name):
 @app.route("/api/groups/toggle", methods=["POST"])
 @requires_auth
 def toggle_group():
-    url = request.json.get("url")
-    groups = all_groups()
-    for g in groups:
-        if g["url"] == url:
-            g["enabled"] = not g.get("enabled", True)
-            save_groups(groups)
-            return jsonify({"ok": True, "enabled": g["enabled"]})
+    url = (request.get_json(silent=True) or {}).get("url")
+    # Khoá quanh read-modify-write: Flask app.run mặc định threaded → 2 request
+    # toggle đồng thời sẽ làm mất update của nhau (cùng đọc bản cũ rồi ghi đè).
+    with store._file_lock("groups"):
+        groups = all_groups()
+        for g in groups:
+            if g["url"] == url:
+                g["enabled"] = not g.get("enabled", True)
+                save_groups(groups)
+                return jsonify({"ok": True, "enabled": g["enabled"]})
     return jsonify({"ok": False, "error": "không tìm thấy nhóm"}), 404
 
 
@@ -159,20 +169,24 @@ def _validate_config_updates(payload):
 @app.route("/api/config", methods=["POST"])
 @requires_auth
 def update_config():
-    config = scheduler.load_config()
-    validated, errors = _validate_config_updates(request.json)
+    validated, errors = _validate_config_updates(request.get_json(silent=True) or {})
     if errors:
         return jsonify({"ok": False, "errors": errors}), 400   # sai → 400, KHÔNG ghi
-    config.update(validated)
-    store._write_json(ROOT / "config.json", config)   # ghi nguyên tử
+    # Khoá quanh read-modify-write: 2 request chỉnh config đồng thời không ghi đè
+    # nhau (đọc lại config BÊN TRONG khoá mới thấy update của request trước).
+    with store._file_lock("config"):
+        config = scheduler.load_config()
+        config.update(validated)
+        store._write_json(ROOT / "config.json", config)   # ghi nguyên tử
     return jsonify({"ok": True, "config": config})
 
 
 @app.route("/api/command", methods=["POST"])
 @requires_auth
 def command():
-    action = request.json.get("action")
-    args = request.json.get("args", {})
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    args = body.get("args", {})
     if action == "pause":
         store.set_paused(True)
         return jsonify({"ok": True, "paused": True})

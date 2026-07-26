@@ -25,10 +25,33 @@ METRIC_MAX_PER_CYCLE = 6       # số bài quét mỗi lần (tránh hoạt đ�
 MAX_CONSECUTIVE_FAILS = 3      # circuit breaker: tự dừng sau N lần đăng lỗi liên tiếp
 RL_BASE_MINUTES = 15           # backoff rate-limit: nghỉ cơ sở (phút)
 RL_CAP_MINUTES = 120           # backoff rate-limit: trần thời gian nghỉ (phút)
+VIDEO_KEEP = 20                # giữ tối đa N video debug (.webm) gần nhất
+TRACE_KEEP = 10                # giữ tối đa N file trace (trace-*.zip) gần nhất
 
 
 def log_print(msg: str):
     print(f"[{datetime.now():%m-%d %H:%M:%S}] {msg}", flush=True)
+
+
+def _prune_dir(folder: Path, pattern: str, keep: int):
+    """Giữ tối đa `keep` file khớp `pattern` mới nhất trong `folder`, xoá phần cũ hơn."""
+    try:
+        files = sorted(folder.glob(pattern), key=lambda p: p.stat().st_mtime)
+        for old in (files[:-keep] if len(files) > keep else []):
+            old.unlink(missing_ok=True)
+    except Exception as e:
+        print(f"[debug prune fail] {folder}/{pattern}: {e}", flush=True)   # dọn lỗi không được giết worker
+
+
+def _prune_debug_artifacts():
+    """Xoá video/trace debug cũ vượt hạn mức — chạy MỘT LẦN lúc khởi động.
+
+    Worker chạy VPS nhiều tháng; bật debug_video/debug_trace rồi quên tắt thì
+    .webm + trace-*.zip phình vô hạn → đầy đĩa, mọi ghi file sau đó bắt đầu lỗi
+    (cùng lý do dọn screenshot ở poster._prune_screenshots).
+    """
+    _prune_dir(ROOT / "state" / "debug_video", "*.webm", VIDEO_KEEP)
+    _prune_dir(ROOT / "state", "trace-*.zip", TRACE_KEEP)
 
 
 def do_post(page, config, group: dict, uid: str) -> str:
@@ -99,6 +122,26 @@ def _safe_append(entry: dict):
                 f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception:
             pass
+        # Dead-letter KHÔNG có nơi nào đọc lại (chỉ có chỗ ghi này) → với bài ĐÃ ĐĂNG
+        # thành công, posted_log.json không còn dấu vết; pick_overdue_group coi nhóm đó
+        # "chưa từng đăng" (datetime.min = ưu tiên cao nhất) và đăng LẠI sau ~45-90s.
+        # Tự dừng thay vì đăng trùng — lỗi ghi (đĩa đầy/quyền) không tự khỏi.
+        if entry.get("status") == "success":
+            try:
+                store.set_paused(True)
+                log_print("⛔ Tự dừng: mất record bài ĐÃ ĐĂNG → nguy cơ đăng trùng. "
+                          "Sửa lỗi ghi file rồi bấm Resume.")
+                store.write_status({
+                    "state": "paused",
+                    "alert": "Ghi posted_log.json THẤT BẠI cho 1 bài đã đăng "
+                             "(xem state/deadletter_posts.jsonl). Đã tự tạm dừng để "
+                             "tránh đăng trùng vào cùng nhóm. Kiểm tra dung lượng đĩa/quyền ghi."})
+            except Exception as e2:
+                # Nếu chính set_paused/write_status cũng lỗi (rất dễ: cùng nguyên nhân
+                # đĩa đầy) thì cơ chế chống-đăng-trùng đã THẤT BẠI — phải nói ra, không
+                # được im lặng tuyệt đối.
+                log_print(f"  ⛔ KHÔNG tự dừng được ({e2}) — NGUY CƠ ĐĂNG TRÙNG. "
+                          f"Tắt worker bằng tay ngay.")
 
 
 def verify_public(p, config, poster_uid: str, limit: int = 15):
@@ -110,10 +153,23 @@ def verify_public(p, config, poster_uid: str, limit: int = 15):
         return
     log = store.load_log()
     now = datetime.now()
-    recent = [e for e in log if e.get("status") == "success"
-              and e["group_name"] != "(test)"
-              and (now - datetime.fromisoformat(e["time"])) < timedelta(days=2)
-              and e.get("public") is not True]
+    # Guard từng entry: entry log hỏng/thiếu key hoặc "time" sai định dạng không được
+    # làm sập cả lượt verify (chỉ bỏ qua entry đó).
+    recent = []
+    for e in log:
+        if e.get("status") != "success" or e.get("public") is True:
+            continue
+        if e.get("group_name") == "(test)" or not e.get("group_url"):
+            continue
+        t = e.get("time")
+        if not t:
+            continue
+        try:
+            if (now - datetime.fromisoformat(t)) >= timedelta(days=2):
+                continue
+        except ValueError:
+            continue
+        recent.append(e)
     if not recent:
         return
     gids = {}
@@ -152,20 +208,38 @@ def verify_public(p, config, poster_uid: str, limit: int = 15):
 
 def handle_commands(p, page, config, uid: str):
     """Thực thi các lệnh một-lần từ dashboard."""
-    for cmd in store.pop_all_commands():
+    # pop_all_commands() đọc VÀ XOÁ cả hàng đợi trong 1 lock → từ đây các lệnh đã
+    # "tiêu thụ", không thể lấy lại. Vì vậy mỗi lệnh phải được bọc riêng: 1 lệnh lỗi
+    # không được cuốn theo (làm mất vĩnh viễn) các lệnh còn lại.
+    cmds = store.pop_all_commands()
+    for i, cmd in enumerate(cmds):
         action = cmd.get("action")
         args = cmd.get("args", {})
-        if action == "post_now":
-            url = args.get("group_url")
-            name = args.get("group_name", "(đăng ngay)")
-            if url:
-                log_print(f"[LỆNH] Đăng ngay: {name}")
-                do_post(page, config, {"name": name, "url": url}, uid)
-        elif action == "refresh_metrics":
-            log_print("[LỆNH] Kiểm chứng công khai ngay")
-            verify_public(p, config, uid)
-        else:
-            log_print(f"[LỆNH] Bỏ qua lệnh lạ: {action}")
+        try:
+            if action == "post_now":
+                url = args.get("group_url")
+                name = args.get("group_name", "(đăng ngay)")
+                if url:
+                    log_print(f"[LỆNH] Đăng ngay: {name}")
+                    do_post(page, config, {"name": name, "url": url}, uid)
+                else:
+                    # Dashboard đã báo "đã gửi lệnh" cho người dùng → im lặng bỏ qua là
+                    # nói dối. Ít nhất phải để lại dấu vết trong log worker.
+                    log_print(f"[LỆNH] post_now thiếu group_url, bỏ qua: {cmd}")
+            elif action == "refresh_metrics":
+                log_print("[LỆNH] Kiểm chứng công khai ngay")
+                verify_public(p, config, uid)
+            else:
+                log_print(f"[LỆNH] Bỏ qua lệnh lạ: {action}")
+        except (poster.CheckpointError, poster.NotLoggedInError, poster.RateLimitError):
+            # Các lỗi này PHẢI nổi lên (thiết kế: dừng/lùi nhịp ngay), nhưng nói rõ
+            # lệnh nào bị bỏ thay vì để mất âm thầm.
+            dropped = [c.get("action") for c in cmds[i + 1:]]
+            if dropped:
+                log_print(f"⚠ Bỏ {len(dropped)} lệnh còn lại do phải dừng ngay: {dropped}")
+            raise
+        except Exception as e:
+            log_print(f"⚠ Lệnh '{action}' lỗi ({e}) — bỏ qua, chạy tiếp lệnh sau.")
 
 
 def write_status(config, state: str, next_post_time, extra=None):
@@ -194,6 +268,14 @@ def loop_once(p, page, uid, st):
 
         now = datetime.now()
         paused = store.is_paused()
+        # Resume trên dashboard chỉ set paused=False; n_fail nằm trong RAM worker nên
+        # vẫn giữ giá trị cũ (= ngưỡng) → chỉ 1 lỗi mới là circuit breaker kích hoạt lại
+        # ngay, kèm thông báo sai số lần. Đặt lại bộ đếm khi paused chuyển True→False.
+        if st.get("prev_paused") and not paused:
+            st["n_fail"] = 0
+            st["rl_streak"] = 0
+            log_print("▶ Resume — đặt lại bộ đếm lỗi liên tiếp.")
+        st["prev_paused"] = paused
         in_hours = scheduler.in_posting_hours(config)
 
         # Đăng bài: mỗi nhóm có đồng hồ riêng (repost_interval_minutes)
@@ -235,8 +317,16 @@ def loop_once(p, page, uid, st):
                          {"alert": f"Facebook giới hạn tần suất — tạm nghỉ đăng tới "
                                    f"{st['rate_limited_until']:%H:%M}. Tài khoản KHÔNG bị khóa (throttle mềm)."})
         else:
-            state = "paused" if paused else ("idle" if not in_hours else "running")
-            write_status(config, state, st["next_post_time"])
+            # Đọc LẠI cờ paused: circuit breaker / _safe_append có thể vừa TỰ pause ngay
+            # trong lượt này và đã ghi alert giải thích. write_status ghi đè NGUYÊN file
+            # status.json, nên nếu dùng biến `paused` đọc từ đầu vòng thì alert vừa ghi
+            # bị xoá và state ("running") mâu thuẫn với paused=true.
+            paused_now = store.is_paused()
+            if paused_now and not paused:
+                pass                    # vừa tự pause trong lượt này → giữ nguyên alert
+            else:
+                state = "paused" if paused_now else ("idle" if not in_hours else "running")
+                write_status(config, state, st["next_post_time"])
     except poster.RateLimitError:
         # 1.9 — lùi theo cấp số nhân + Equal Jitter: nghỉ dài dần khi bị giới hạn
         # liên tiếp, có nhiễu để không thành khuôn máy móc. Reset khi 1 bài thành công.
@@ -287,6 +377,7 @@ def main():
     if _proxy:
         log_print(f"Dùng proxy: {_proxy.get('server')}")
     _video_dir = str(ROOT / "state" / "debug_video") if _cfg.get("debug_video") else None
+    _prune_debug_artifacts()   # dọn video/trace cũ 1 lần lúc khởi động (không đặt trong vòng lặp nóng)
     with sync_playwright() as p:
         ctx = p.chromium.launch_persistent_context(
             user_data_dir=str(PROFILE_DIR),
@@ -314,9 +405,17 @@ def main():
                     page.goto("https://www.facebook.com", wait_until="domcontentloaded", timeout=60000)
                     page.wait_for_timeout(3000)
                     uid = poster.get_user_id(page)
-                    break
+                    if uid:
+                        break
+                    # get_user_id NUỐT exception và trả "" (không raise) → nếu break vô
+                    # điều kiện thì retry vô nghĩa: 1 lần load chậm là uid rỗng vĩnh viễn
+                    # cả vòng đời tiến trình, verify công khai tắt âm thầm.
+                    log_print(f"Khởi động lần {attempt}: chưa lấy được user id"
+                              f"{'; thử lại sau 15s...' if attempt < 5 else ' (hết lượt thử).'}")
                 except Exception as e:
-                    log_print(f"Khởi động lần {attempt} lỗi ({e}); thử lại sau 15s...")
+                    log_print(f"Khởi động lần {attempt} lỗi ({e})"
+                              f"{'; thử lại sau 15s...' if attempt < 5 else ' (hết lượt thử).'}")
+                if attempt < 5:
                     time.sleep(15)
             if not uid:
                 # A3 — uid rỗng làm verify (nick phụ) tắt âm thầm → đẩy cảnh báo nổi bật.

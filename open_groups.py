@@ -31,7 +31,8 @@ if not PROFILE_DIR.exists():
 
 
 def group_id(url: str) -> str:
-    m = re.search(r"/groups/([^/]+)", url)
+    # Loại ?query / #fragment giống poster.py — xem giải thích ở check_joined.py.
+    m = re.search(r"/groups/([^/?#]+)", url)
     return m.group(1) if m else url
 
 
